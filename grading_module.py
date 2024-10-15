@@ -19,6 +19,7 @@ def assist_grading(root, session):
     tk.Label(window, text="课程ID:").grid(row=0, column=0, padx=10, pady=5)
     courses_id_entry = tk.Entry(window)
     courses_id_entry.grid(row=0, column=1)
+    courses_id_entry.insert(0, 'yrjif25m')  # 设置默认值为 'yrjif25m'
 
     tk.Label(window, text="作业编号:").grid(row=1, column=0, padx=10, pady=5)
     homework_number_entry = tk.Entry(window)
@@ -38,13 +39,6 @@ def assist_grading(root, session):
     requirements_frame.grid(row=5, column=0, columnspan=2, padx=10, pady=5)
     requirements_text = scrolledtext.ScrolledText(requirements_frame, width=50, height=10)
     requirements_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-    # 使评分要求文本框响应鼠标滚轮事件
-    def _on_mousewheel(event):
-        requirements_text.yview_scroll(int(-1*(event.delta/120)), "units")
-        return "break"  # 防止事件向上传递
-
-    requirements_text.bind_all("<MouseWheel>", _on_mousewheel)
 
     # 3. 确认按钮，进入评分界面
     def confirm_parameters():
@@ -108,6 +102,9 @@ def assist_grading(root, session):
     confirm_button.grid(row=6, column=0, columnspan=2, pady=10)
 
 def grading_process(window, session, courses_id, category_id, student_numbers, student_number_to_id, requirements):
+    # 定义一个字典，保存已提交学生的评分数据
+    submitted_student_scores = {}
+
     # 选择要评分的学生
     tk.Label(window, text="请选择要评分的学生:").pack(pady=5)
     student_var = tk.StringVar(window)
@@ -116,8 +113,7 @@ def grading_process(window, session, courses_id, category_id, student_numbers, s
     student_menu = tk.OptionMenu(window, student_var, *student_numbers)
     student_menu.pack(pady=5)
 
-    # 显示评分要求，并生成评分输入框
-    tk.Label(window, text="评分要求:").pack(pady=5)
+    # 评分要求的解析
     requirement_lines = requirements.strip().split('\n')
 
     score_entries = []  # 保存每个题目的得分输入框
@@ -146,18 +142,22 @@ def grading_process(window, session, courses_id, category_id, student_numbers, s
 
     frame_canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
+    # 创建评分输入框
     for line in requirement_lines:
         if "得分（总分" in line:
-            # 提取总分
-            match = re.search(r'得分（总分\s*(\d+)\s*）', line)
+            # 修改正则表达式，考虑空格
+            match = re.search(r'得分（总分\s*(\d+(\.\d+)?)\s*）', line)
             if match:
-                total_score = int(match.group(1))
+                total_score = float(match.group(1))
                 # 创建题目标签和得分输入框
                 tk.Label(frame_inner, text=line).pack(anchor='w')
                 score_entry = tk.Entry(frame_inner)
                 score_entry.pack(anchor='w')
                 score_entry.insert(0, str(total_score))  # 默认得满分
                 score_entries.append((score_entry, total_score))
+            else:
+                # 如果无法匹配总分，提示用户
+                tk.Label(frame_inner, text=f"无法解析总分：{line}", fg='red').pack(anchor='w')
         else:
             tk.Label(frame_inner, text=line).pack(anchor='w')
 
@@ -170,7 +170,15 @@ def grading_process(window, session, courses_id, category_id, student_numbers, s
     total_score_label = tk.Label(window, text="总分：0")
     total_score_label.pack(pady=5)
 
-    # 计算总分的函数
+    # 定义重置得分的函数
+    def reset_scores_to_full_marks():
+        for entry, max_score in score_entries:
+            entry.delete(0, tk.END)
+            entry.insert(0, str(max_score))
+        # 更新总分
+        calculate_total_score()
+
+    # 定义计算总分的函数
     def calculate_total_score():
         total = 0
         for entry, max_score in score_entries:
@@ -187,12 +195,52 @@ def grading_process(window, session, courses_id, category_id, student_numbers, s
                 return
         total_score_label.config(text=f"总分：{total}")
 
-    # 在每个得分输入框失去焦点时计算总分
+    # 在每个得分输入框的值发生变化时，实时更新总分
     for entry, _ in score_entries:
-        entry.bind("<FocusOut>", lambda event: calculate_total_score())
+        entry.bind("<KeyRelease>", lambda event: calculate_total_score())
 
+    # 初始化之前的学生变量
+    previous_student_var = tk.StringVar()
+    previous_student_var.set(student_numbers[0])  # 初始化为第一个学生
 
+    # 绑定学生选择变化的事件
+    def on_student_change(*args):
+        # 保存当前学生的评分数据
+        current_student = previous_student_var.get()
+        if current_student:
+            # 获取当前得分
+            scores = []
+            for entry, _ in score_entries:
+                scores.append(entry.get())
+            # 获取评语
+            comment = comment_text.get("1.0", tk.END)
+            # 保存数据
+            submitted_student_scores[current_student] = {
+                'scores': scores,
+                'comment': comment
+            }
 
+        # 切换到新学生
+        new_student = student_var.get()
+        # 检查该学生是否已提交过
+        if new_student in submitted_student_scores:
+            # 加载已保存的数据
+            data = submitted_student_scores[new_student]
+            for (entry, _), score in zip(score_entries, data['scores']):
+                entry.delete(0, tk.END)
+                entry.insert(0, score)
+            comment_text.delete("1.0", tk.END)
+            comment_text.insert("1.0", data['comment'])
+        else:
+            # 重置得分和评语
+            reset_scores_to_full_marks()
+            comment_text.delete("1.0", tk.END)
+        # 更新总分
+        calculate_total_score()
+        # 更新之前的学生变量
+        previous_student_var.set(new_student)
+
+    student_var.trace('w', on_student_change)
 
     # 提交评阅的函数
     def submit_review():
@@ -234,6 +282,11 @@ def grading_process(window, session, courses_id, category_id, student_numbers, s
         # 提交评阅
         success = submit_review_to_server(session, student_id, courses_id, category_id, total_score, full_comment)
         if success:
+            # 提交成功后，保存评分数据
+            submitted_student_scores[student_number] = {
+                'scores': [str(score) for score in scores],
+                'comment': comment
+            }
             messagebox.showinfo("成功", f"已提交对学生 {student_number} 的评阅")
         else:
             messagebox.showerror("错误", f"提交评阅失败，学生：{student_number}")
