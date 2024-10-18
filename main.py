@@ -5,12 +5,13 @@ from tkinter import messagebox
 from login import login
 from download_module import download_homework
 from grading_module import assist_grading
+from analysis_module import analyze_assignments
 
 def main():
     # 创建主窗口
     root = tk.Tk()
     root.title("Educoder 助手")
-    root.geometry("400x300")
+    root.geometry("500x400")
 
     # 存储会话的全局变量
     session = {}
@@ -41,6 +42,7 @@ def main():
             # 启用功能按钮
             download_button.config(state=tk.NORMAL)
             grading_button.config(state=tk.NORMAL)
+            analysis_button.config(state=tk.NORMAL)
         else:
             messagebox.showerror("错误", "登录失败")
 
@@ -56,6 +58,11 @@ def main():
     grading_button = tk.Button(root, text="辅助批改", width=20,
                                command=lambda: assist_grading(root, session), state=tk.DISABLED)
     grading_button.pack(pady=10)
+
+    # 新增“学情分析”按钮
+    analysis_button = tk.Button(root, text="学情分析", width=20,
+                                command=lambda: analyze_assignments(root, session), state=tk.DISABLED)
+    analysis_button.pack(pady=10)
 
     root.mainloop()
 

@@ -16,6 +16,7 @@ def download_homework(root, session):
     tk.Label(download_window, text="课程ID:").grid(row=0, column=0, padx=10, pady=5, sticky='e')
     courses_id_entry = tk.Entry(download_window)
     courses_id_entry.grid(row=0, column=1, padx=10, pady=5)
+    courses_id_entry.insert(0, 'yrjif25m')  # 设置默认值为 'yrjif25m'
 
     tk.Label(download_window, text="作业编号:").grid(row=1, column=0, padx=10, pady=5, sticky='e')
     homework_number_entry = tk.Entry(download_window)
